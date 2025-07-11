@@ -21,18 +21,21 @@
             doc, 
             getDoc, 
             setDoc,
-            updateDoc
+            updateDoc,
+            collection,
+            query,
+            where,
+            getDocs
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- Firebase Configuration ---
-        // NOTE: Replace with your actual Firebase config
+        // --- Firebase Configuration (INSERIDO COM SUAS CHAVES) ---
         const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
+          apiKey: "AIzaSyDTbOy_DNJWJ1BNP0Eyo4dFjF29f3bL7W4",
+          authDomain: "calculadora-de-carnes.firebaseapp.com",
+          projectId: "calculadora-de-carnes",
+          storageBucket: "calculadora-de-carnes.appspot.com",
+          messagingSenderId: "1084802417858",
+          appId: "1:1084802417858:web:9596ed77b0a1f14fe5c75b"
         };
 
         // --- App Initialization ---
@@ -79,28 +82,35 @@
         // --- UI Elements ---
         const authContainer = document.getElementById('auth-container');
         const appContainer = document.getElementById('app-container');
+        const adminContainer = document.getElementById('admin-container');
+        const pendingContainer = document.getElementById('pending-container');
         const loadingOverlay = document.getElementById('loading-overlay');
         const userEmailSpan = document.getElementById('user-email');
 
         // --- Utility Functions ---
-        const formatCurrency = (value) => `R$ ${value.toFixed(2).replace('.', ',')}`;
-        const formatNumber = (value) => value.toFixed(3).replace('.', ',');
-        const parseFloatBR = (str) => parseFloat(String(str).replace(',', '.'));
-
-        // --- App Logic ---
         const showLoading = (show) => {
             loadingOverlay.style.display = show ? 'flex' : 'none';
         };
 
-        const setupNewUser = async (userId) => {
-            console.log("Setting up new user:", userId);
+        const hideAllContainers = () => {
+            authContainer.classList.add('hidden');
+            appContainer.classList.add('hidden');
+            adminContainer.classList.add('hidden');
+            pendingContainer.classList.add('hidden');
+        };
+
+        // --- App Logic ---
+        const setupNewUser = async (userId, email) => {
+            console.log("Configurando novo usuário:", userId);
             const userDocRef = doc(db, "users", userId);
             const initialData = {
+                email: email,
+                role: 'user',
+                status: 'pending', // 'pending', 'approved', 'rejected'
                 pesos_carnes: DEFAULT_DATABASE,
                 itens_database: DEFAULT_ITENS_DATABASE,
                 item_config: {},
                 boi_venda_prices: {},
-                // Add other default fields as needed
             };
             await setDoc(userDocRef, initialData);
             return initialData;
@@ -110,14 +120,28 @@
             showLoading(true);
             const userDocRef = doc(db, "users", userId);
             const docSnap = await getDoc(userDocRef);
+            
+            hideAllContainers();
+
             if (docSnap.exists()) {
-                console.log("User data loaded.");
                 userData = docSnap.data();
+                console.log("Dados do usuário carregados:", userData.role, userData.status);
+                
+                if (userData.role === 'admin') {
+                    initializeAppAdminUI();
+                } else if (userData.status === 'approved') {
+                    initializeAppUI();
+                } else if (userData.status === 'pending') {
+                    pendingContainer.classList.remove('hidden');
+                } else { // rejected or other status
+                    alert('Sua conta não foi aprovada. Entre em contato com o administrador.');
+                    await signOut(auth);
+                }
+
             } else {
-                console.log("No user data found, creating new profile.");
-                userData = await setupNewUser(userId);
+                console.log("Nenhum dado de usuário encontrado no Firestore.");
+                authContainer.classList.remove('hidden');
             }
-            initializeAppUI();
             showLoading(false);
         };
         
@@ -125,60 +149,97 @@
             if (!currentUser) return;
             showLoading(true);
             const userDocRef = doc(db, "users", currentUser.uid);
-            await setDoc(userDocRef, userData); // Overwrites the whole document
-            console.log("User data saved.");
+            await updateDoc(userDocRef, {
+                pesos_carnes: userData.pesos_carnes,
+                itens_database: userData.itens_database,
+                item_config: userData.item_config,
+                boi_venda_prices: userData.boi_venda_prices
+            });
+            console.log("Dados do usuário salvos.");
+            alert("Dados salvos com sucesso!");
             showLoading(false);
         };
 
         const initializeAppUI = () => {
-            // This is where you'll call functions to build your tables and forms
-            // For now, it just shows the app container
-            authContainer.classList.add('hidden');
             appContainer.classList.remove('hidden');
             userEmailSpan.textContent = currentUser.email;
-            
-            // Example: build a table (you'll need to implement this)
             buildTables();
         };
 
+        const initializeAppAdminUI = async () => {
+            adminContainer.classList.remove('hidden');
+            document.getElementById('admin-email').textContent = currentUser.email;
+            
+            const pendingUsersList = document.getElementById('pending-users-list');
+            pendingUsersList.innerHTML = '';
+            
+            showLoading(true);
+            const usersRef = collection(db, "users");
+            const q = query(usersRef, where("status", "==", "pending"));
+            const querySnapshot = await getDocs(q);
+            
+            if (querySnapshot.empty) {
+                pendingUsersList.innerHTML = '<p class="text-stone-500">Nenhum usuário pendente.</p>';
+            } else {
+                querySnapshot.forEach((userDoc) => {
+                    const user = userDoc.data();
+                    const userId = userDoc.id;
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'flex justify-between items-center p-3 bg-stone-100 rounded-md';
+                    userDiv.innerHTML = `
+                        <span class="text-stone-800">${user.email}</span>
+                        <div>
+                            <button data-uid="${userId}" class="approve-btn px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-md hover:bg-green-600">Aprovar</button>
+                            <button data-uid="${userId}" class="reject-btn px-3 py-1 bg-red-500 text-white text-sm font-semibold rounded-md hover:bg-red-600 ml-2">Rejeitar</button>
+                        </div>
+                    `;
+                    pendingUsersList.appendChild(userDiv);
+                });
+            }
+            showLoading(false);
+        };
+
+        const updateUserStatus = async (userId, newStatus) => {
+            showLoading(true);
+            const userDocRef = doc(db, "users", userId);
+            await updateDoc(userDocRef, { status: newStatus });
+            console.log(`Usuário ${userId} atualizado para ${newStatus}`);
+            initializeAppAdminUI();
+        };
+
         const buildTables = () => {
-            // Placeholder for building your dynamic tables
             const suinoContainer = document.getElementById('suino-tables-container');
             suinoContainer.innerHTML = `
-                <div class="bg-yellow-100 p-4 rounded-lg shadow">
+                <div class="bg-white p-4 rounded-lg shadow-md">
                     <h3 class="font-bold text-lg mb-2">Modelo 1</h3>
-                    <p class="text-sm">Table content for Modelo 1 will be rendered here based on user data.</p>
+                    <p class="text-sm text-stone-600">O conteúdo da tabela para o Modelo 1 será renderizado aqui com base nos dados do usuário.</p>
                 </div>
-                <div class="bg-yellow-100 p-4 rounded-lg shadow">
+                <div class="bg-white p-4 rounded-lg shadow-md">
                     <h3 class="font-bold text-lg mb-2">Modelo 2</h3>
-                    <p class="text-sm">Table content for Modelo 2 will be rendered here based on user data.</p>
+                    <p class="text-sm text-stone-600">O conteúdo da tabela para o Modelo 2 será renderizado aqui com base nos dados do usuário.</p>
                 </div>
             `;
 
             const boiContainer = document.getElementById('boi-table-container');
             boiContainer.innerHTML = `
-                <div class="bg-blue-100 p-4 rounded-lg shadow">
+                <div class="bg-white p-4 rounded-lg shadow-md">
                     <h3 class="font-bold text-lg mb-2">Carnes Bovinas</h3>
-                     <p class="text-sm">Beef table content will be rendered here based on user data.</p>
+                     <p class="text-sm text-stone-600">O conteúdo da tabela de bovinos será renderizado aqui com base nos dados do usuário.</p>
                 </div>
             `;
-             // You would loop through userData.itens_database and create the full tables
         };
-
 
         // --- Auth Handling ---
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUser = user;
-                console.log("User is signed in:", user.uid);
                 loadUserData(user.uid);
             } else {
                 currentUser = null;
                 userData = {};
+                hideAllContainers();
                 authContainer.classList.remove('hidden');
-                appContainer.classList.add('hidden');
                 showLoading(false);
-                console.log("User is signed out.");
             }
         });
 
@@ -188,9 +249,13 @@
             const password = e.target.password.value;
             showLoading(true);
             try {
-                await signInWithEmailAndPassword(auth, email, password);
+                if (email.startsWith('caiano') && password === 'hy765100') {
+                     await signInWithEmailAndPassword(auth, email, password);
+                } else {
+                     await signInWithEmailAndPassword(auth, email, password);
+                }
             } catch (error) {
-                alert(`Error logging in: ${error.message}`);
+                alert(`Erro ao fazer login: ${error.message}`);
                 showLoading(false);
             }
         });
@@ -201,18 +266,29 @@
             const password = e.target.password.value;
             showLoading(true);
             try {
-                await createUserWithEmailAndPassword(auth, email, password);
-                // onAuthStateChanged will handle the rest
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                await setupNewUser(userCredential.user.uid, userCredential.user.email);
+                alert('Cadastro realizado! Aguarde a aprovação do administrador.');
+                await signOut(auth);
             } catch (error) {
-                alert(`Error registering: ${error.message}`);
+                alert(`Erro ao registrar: ${error.message}`);
                 showLoading(false);
             }
         });
-
-        document.getElementById('logout-button').addEventListener('click', async () => {
-            await signOut(auth);
+        
+        document.getElementById('admin-container').addEventListener('click', (e) => {
+            if (e.target.classList.contains('approve-btn')) {
+                const userId = e.target.dataset.uid;
+                updateUserStatus(userId, 'approved');
+            }
+            if (e.target.classList.contains('reject-btn')) {
+                const userId = e.target.dataset.uid;
+                updateUserStatus(userId, 'rejected');
+            }
         });
 
+        document.getElementById('logout-button').addEventListener('click', () => signOut(auth));
+        document.getElementById('admin-logout-button').addEventListener('click', () => signOut(auth));
         document.getElementById('save-button').addEventListener('click', saveUserData);
 
     </script>
@@ -229,86 +305,106 @@
     </div>
 
     <!-- Auth Container -->
-    <div id="auth-container" class="min-h-screen flex items-center justify-center">
-        <div class="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-lg">
+    <div id="auth-container" class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-4xl p-8 space-y-8 bg-white rounded-lg shadow-2xl">
             <div class="text-center">
-                <h1 class="text-3xl font-bold text-stone-900">Calculadora de Preços</h1>
+                <h1 class="text-3xl font-bold text-stone-900">Calculadora de Preços de Carnes</h1>
                 <p class="mt-2 text-stone-600">Faça login ou crie uma conta para continuar</p>
             </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12">
                 <!-- Login Form -->
                 <form id="login-form" class="space-y-6">
-                    <h2 class="text-xl font-semibold text-center">Login</h2>
+                    <h2 class="text-2xl font-semibold text-center text-stone-800">Login</h2>
                     <div>
                         <label for="login-email" class="sr-only">Email</label>
-                        <input id="login-email" name="email" type="email" autocomplete="email" required class="w-full px-3 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="Email">
+                        <input id="login-email" name="email" type="email" autocomplete="email" required class="w-full px-4 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="Email">
                     </div>
                     <div>
                         <label for="login-password" class="sr-only">Senha</label>
-                        <input id="login-password" name="password" type="password" autocomplete="current-password" required class="w-full px-3 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="Senha">
+                        <input id="login-password" name="password" type="password" autocomplete="current-password" required class="w-full px-4 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="Senha">
                     </div>
-                    <button type="submit" class="w-full py-2 px-4 bg-yellow-500 text-white font-semibold rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors">
+                    <button type="submit" class="w-full py-3 px-4 bg-yellow-500 text-white font-semibold rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors">
                         Entrar
                     </button>
                 </form>
 
                 <!-- Register Form -->
-                <form id="register-form" class="space-y-6">
-                    <h2 class="text-xl font-semibold text-center">Registrar</h2>
+                <form id="register-form" class="space-y-6 border-t md:border-t-0 md:border-l border-stone-200 pt-6 md:pt-0 md:pl-12">
+                    <h2 class="text-2xl font-semibold text-center text-stone-800">Registrar Nova Conta</h2>
                     <div>
                         <label for="register-email" class="sr-only">Email</label>
-                        <input id="register-email" name="email" type="email" autocomplete="email" required class="w-full px-3 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Email">
+                        <input id="register-email" name="email" type="email" autocomplete="email" required class="w-full px-4 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Seu melhor email">
                     </div>
                     <div>
                         <label for="register-password" class="sr-only">Senha</label>
-                        <input id="register-password" name="password" type="password" autocomplete="new-password" required class="w-full px-3 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Nova Senha">
+                        <input id="register-password" name="password" type="password" autocomplete="new-password" required class="w-full px-4 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Crie uma senha forte">
                     </div>
-                    <button type="submit" class="w-full py-2 px-4 bg-green-500 text-white font-semibold rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                    <button type="submit" class="w-full py-3 px-4 bg-green-500 text-white font-semibold rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                         Criar Conta
                     </button>
                 </form>
+            </div>
+             <div class="text-center mt-4 text-sm text-stone-500">
+                <p><strong>Instruções para o Administrador:</strong> Para criar o usuário 'caiano', primeiro registre-se com um email (ex: caiano@email.com) e a senha 'hy765100'. Depois, acesse o painel do Firestore, encontre o documento do usuário e altere o campo 'role' para 'admin' e 'status' para 'approved'.</p>
             </div>
         </div>
     </div>
 
     <!-- App Container -->
     <div id="app-container" class="hidden">
-        <header class="bg-white shadow-md p-4 flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-stone-900">Calculadora de Preços</h1>
+        <header class="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-10">
+            <h1 class="text-2xl font-bold text-stone-900">Minha Calculadora</h1>
             <div class="flex items-center space-x-4">
                  <button id="save-button" class="px-4 py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 transition-colors">Salvar Dados</button>
-                <span id="user-email" class="text-stone-600"></span>
+                <span id="user-email" class="text-stone-600 font-medium"></span>
                 <button id="logout-button" class="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors">Sair</button>
             </div>
         </header>
 
         <main class="p-4 md:p-8 space-y-8">
-            <!-- Cost Calculator Section -->
             <section class="bg-white p-6 rounded-lg shadow-lg">
                 <h2 class="text-xl font-bold mb-4">Cálculo de Custo do Suíno</h2>
-                <!-- Cost calculator form will go here -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <p class="text-stone-500 col-span-full">O formulário de cálculo de custo será implementado aqui, com os campos Peso, Pr. Unit, ST%, Fator, etc.</p>
+                    <p class="text-stone-500 col-span-full">O formulário de cálculo de custo será implementado aqui.</p>
                 </div>
             </section>
-
-            <!-- Suino Tables Section -->
             <section>
-                 <h2 class="text-xl font-bold mb-4">Tabelas de Suínos</h2>
-                <div id="suino-tables-container" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <!-- Suino tables will be dynamically inserted here -->
-                </div>
+                 <h2 class="text-2xl font-bold mb-4">Tabelas de Suínos</h2>
+                <div id="suino-tables-container" class="grid grid-cols-1 lg:grid-cols-2 gap-8"></div>
             </section>
-
-             <!-- Boi Table Section -->
             <section>
-                <h2 class="text-xl font-bold mb-4">Tabela de Bovinos</h2>
-                <div id="boi-table-container">
-                    <!-- Boi table will be dynamically inserted here -->
-                </div>
+                <h2 class="text-2xl font-bold mb-4">Tabela de Bovinos</h2>
+                <div id="boi-table-container"></div>
             </section>
         </main>
+    </div>
+    
+    <!-- Admin Container -->
+    <div id="admin-container" class="hidden">
+         <header class="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-10">
+            <h1 class="text-2xl font-bold text-indigo-800">Painel do Administrador</h1>
+            <div class="flex items-center space-x-4">
+                <span id="admin-email" class="text-stone-600 font-medium"></span>
+                <button id="admin-logout-button" class="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors">Sair</button>
+            </div>
+        </header>
+        <main class="p-4 md:p-8">
+            <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+                <h2 class="text-xl font-bold mb-4">Usuários Pendentes de Aprovação</h2>
+                <div id="pending-users-list" class="space-y-3">
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Pending Approval Container -->
+    <div id="pending-container" class="hidden min-h-screen flex items-center justify-center">
+        <div class="text-center p-8 bg-white rounded-lg shadow-2xl">
+            <h1 class="text-3xl font-bold text-stone-900">Aguardando Aprovação</h1>
+            <p class="mt-2 text-stone-600">Sua conta foi criada e está aguardando a aprovação de um administrador.</p>
+            <p class="mt-1 text-stone-600">Você será notificado por email ou pode tentar fazer login mais tarde.</p>
+        </div>
     </div>
 
 </body>
