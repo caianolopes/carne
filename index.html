@@ -3,48 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora de Preços de Carnes</title>
+    <title>Calculadora de Preços de Carnes (Versão Local)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .price-input { min-width: 80px; max-width: 100px; }
+        .modal-backdrop {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5); z-index: 40;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background-color: white; border-radius: 0.5rem;
+            padding: 1.5rem; max-height: 90vh; overflow-y: auto;
+            min-width: 500px; max-width: 95%;
+        }
+        .hidden { display: none !important; }
+        .tab-button {
+            padding: 0.5rem 1rem; border-width: 1px 1px 0 1px;
+            border-color: transparent; border-radius: 0.5rem 0.5rem 0 0;
+            cursor: pointer;
+        }
+        .tab-button.active {
+            background-color: white; border-color: #e5e7eb;
+            font-weight: 600;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body class="bg-stone-100 text-stone-800">
+
+    <!-- App Container -->
+    <div id="app-container">
+        <header class="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-10">
+            <h1 class="text-2xl font-bold text-stone-900">Calculadora de Preços</h1>
+            <div class="flex items-center space-x-2">
+                <button id="manage-pesos-btn" class="px-3 py-2 bg-gray-200 text-gray-800 font-semibold rounded-md hover:bg-gray-300 transition-colors shadow-sm text-sm">Gerenciar Pesos</button>
+                <button id="manage-cortes-btn" class="px-3 py-2 bg-gray-200 text-gray-800 font-semibold rounded-md hover:bg-gray-300 transition-colors shadow-sm text-sm">Gerenciar Cortes</button>
+                <button id="save-button" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors shadow-sm">Salvar Alterações</button>
+            </div>
+        </header>
+
+        <main class="p-4 md:p-8 space-y-8">
+            <!-- Cost Calculator Section -->
+            <section class="bg-white p-6 rounded-lg shadow-lg">
+                <h2 class="text-xl font-bold mb-4 border-b pb-2">Cálculo de Custo do Suíno</h2>
+                <div id="cost-calculator-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"></div>
+            </section>
+
+            <!-- Suino Tables Section -->
+            <section>
+                 <h2 class="text-2xl font-bold mb-4">Tabelas de Suínos</h2>
+                <div id="suino-tables-container" class="grid grid-cols-1 xl:grid-cols-2 gap-8"></div>
+            </section>
+
+             <!-- Boi Table Section -->
+            <section>
+                <h2 class="text-2xl font-bold mb-4">Tabela de Bovinos</h2>
+                <div id="boi-table-container" class="bg-white p-4 rounded-lg shadow-lg overflow-x-auto"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modal-container" class="modal-backdrop hidden">
+        <div id="modal-content" class="modal-content">
+            <!-- Modal content will be injected here -->
+        </div>
+    </div>
+
     <script type="module">
-        // Firebase Imports
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { 
-            getAuth, 
-            onAuthStateChanged, 
-            createUserWithEmailAndPassword, 
-            signInWithEmailAndPassword, 
-            signOut 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, 
-            doc, 
-            getDoc, 
-            setDoc,
-            updateDoc,
-            collection,
-            query,
-            where,
-            getDocs
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- Firebase Configuration (INSERIDO COM SUAS CHAVES) ---
-        const firebaseConfig = {
-          apiKey: "AIzaSyDTbOy_DNJWJ1BNP0Eyo4dFjF29f3bL7W4",
-          authDomain: "calculadora-de-carnes.firebaseapp.com",
-          projectId: "calculadora-de-carnes",
-          storageBucket: "calculadora-de-carnes.appspot.com",
-          messagingSenderId: "1084802417858",
-          appId: "1:1084802417858:web:9596ed77b0a1f14fe5c75b"
-        };
-
-        // --- App Initialization ---
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
         // --- Default Data Structures ---
-        const DEFAULT_DATABASE = {
+        const DEFAULT_PESOS_DATABASE = {
             "CABEÇA COMPLETA COM PA": 2.850, "CABEÇA SEM PAPADA": 1.700, "PÉ COM JOELHO": 2.550, "PÉ": 1.050,
             "JOELHO": 1.500, "ORELHA": 0.250, "ORELHA COM PAPADA": 1.150, "PAPADA": 0.900,
             "PÁ COM OSSO E TOUCINHO": 12.100, "PÁ SEM OSSO": 8.200, "CARRÉ COM OSSO E TOUCINHO": 6.550,
@@ -55,18 +87,26 @@
         };
         const DEFAULT_ITENS_DATABASE = {
             "modelo1": [
-                {'desc': 'PÁ COM OSSO E TOUCINHO', 'cod': '1366/6'}, {'desc': 'CARRÉ COM OSSO E TOUCINHO', 'cod': '913/3'},
-                {'desc': 'PERNIL LIMPO', 'cod': '196/0'}, {'desc': 'COSTELINHA SUÍNA LIMPA', 'cod': '199/1'},
-                {'desc': 'CABEÇA', 'cod': '209/4'}, {'desc': 'PÉ COM JOELHO', 'cod': '208/0'},
-                {'desc': 'ORELHA COM PAPADA', 'cod': '67990/9'}, {'desc': 'BARRIGUINHA', 'cod': '1367/3'},
-                {'desc': 'TOUCINHO', 'cod': '201/1'}
+                {'desc': 'PÁ COM OSSO E TOUCINHO', 'cod': '1366/6', 'linkedPesoKeys': ['PÁ COM OSSO E TOUCINHO']},
+                {'desc': 'CARRÉ COM OSSO E TOUCINHO', 'cod': '913/3', 'linkedPesoKeys': ['CARRÉ COM OSSO E TOUCINHO']},
+                {'desc': 'PERNIL LIMPO', 'cod': '196/0', 'linkedPesoKeys': ['PERNIL SEM OSSO']},
+                {'desc': 'COSTELINHA SUÍNA LIMPA', 'cod': '199/1', 'linkedPesoKeys': ['COSTELINHA SEM TOUCINHO']},
+                {'desc': 'CABEÇA', 'cod': '209/4', 'linkedPesoKeys': ['CABEÇA SEM PAPADA']},
+                {'desc': 'PÉ COM JOELHO', 'cod': '208/0', 'linkedPesoKeys': ['PÉ COM JOELHO']},
+                {'desc': 'ORELHA COM PAPADA', 'cod': '67990/9', 'linkedPesoKeys': ['ORELHA COM PAPADA']},
+                {'desc': 'BARRIGUINHA', 'cod': '1367/3', 'linkedPesoKeys': ['BARRIGUINHA']},
+                {'desc': 'TOUCINHO', 'cod': '201/1', 'linkedPesoKeys': ['TOUCINHO DO CARRÉ', 'TOUCINHO DO PERNIL', 'TOUCINHO DA COSTELINHA']}
             ],
             "modelo2": [
-                {'desc': 'PÁ COM OSSO E TOUCINHO', 'cod': '1366/6'}, {'desc': 'CARRÉ COM OSSO E TOUCINHO', 'cod': '913/3'},
-                {'desc': 'PERNIL COM OSSO E TOUCINHO', 'cod': '1819/7'}, {'desc': 'COSTELINHA SUÍNA LIMPA', 'cod': '199/1'},
-                {'desc': 'CABEÇA', 'cod': '209/4'}, {'desc': 'PÉ COM JOELHO', 'cod': '208/0'},
-                {'desc': 'ORELHA COM PAPADA', 'cod': '67990/9'}, {'desc': 'BARRIGUINHA', 'cod': '1367/3'},
-                {'desc': 'TOUCINHO DA COSTELINHA', 'cod': '201/1c'}
+                 {'desc': 'PÁ COM OSSO E TOUCINHO', 'cod': '1366/6', 'linkedPesoKeys': ['PÁ COM OSSO E TOUCINHO']},
+                {'desc': 'CARRÉ COM OSSO E TOUCINHO', 'cod': '913/3', 'linkedPesoKeys': ['CARRÉ COM OSSO E TOUCINHO']},
+                {'desc': 'PERNIL COM OSSO E TOUCINHO', 'cod': '1819/7', 'linkedPesoKeys': ['PERNIL COM OSSO E TOUCINHO']},
+                {'desc': 'COSTELINHA SUÍNA LIMPA', 'cod': '199/1', 'linkedPesoKeys': ['COSTELINHA SEM TOUCINHO']},
+                {'desc': 'CABEÇA', 'cod': '209/4', 'linkedPesoKeys': ['CABEÇA SEM PAPADA']},
+                {'desc': 'PÉ COM JOELHO', 'cod': '208/0', 'linkedPesoKeys': ['PÉ COM JOELHO']},
+                {'desc': 'ORELHA COM PAPADA', 'cod': '67990/9', 'linkedPesoKeys': ['ORELHA COM PAPADA']},
+                {'desc': 'BARRIGUINHA', 'cod': '1367/3', 'linkedPesoKeys': ['BARRIGUINHA']},
+                {'desc': 'TOUCINHO DA COSTELINHA', 'cod': '201/1c', 'linkedPesoKeys': ['TOUCINHO DO CARRÉ', 'TOUCINHO DO PERNIL', 'TOUCINHO DA COSTELINHA']}
             ],
             "boi": [
                 {'desc': 'MÚSCULO', 'cod': '175/5', 'precoPago': 25.49},
@@ -76,336 +116,386 @@
         };
 
         // --- Global State ---
-        let currentUser = null;
-        let userData = {};
-
-        // --- UI Elements ---
-        const authContainer = document.getElementById('auth-container');
-        const appContainer = document.getElementById('app-container');
-        const adminContainer = document.getElementById('admin-container');
-        const pendingContainer = document.getElementById('pending-container');
-        const loadingOverlay = document.getElementById('loading-overlay');
-        const userEmailSpan = document.getElementById('user-email');
+        let appData = {};
+        let totalLiquidoCustoValor = 0.0;
 
         // --- Utility Functions ---
-        const showLoading = (show) => {
-            loadingOverlay.style.display = show ? 'flex' : 'none';
+        const formatCurrency = (value) => `R$ ${Number(value).toFixed(2).replace('.', ',')}`;
+        const formatNumber = (value) => Number(value).toFixed(3).replace('.', ',');
+        const parseFloatBR = (str) => {
+            const sanitized = String(str).replace(/\./g, '').replace(',', '.');
+            return parseFloat(sanitized) || 0;
         };
 
-        const hideAllContainers = () => {
-            authContainer.classList.add('hidden');
-            appContainer.classList.add('hidden');
-            adminContainer.classList.add('hidden');
-            pendingContainer.classList.add('hidden');
-        };
-
-        // --- App Logic ---
-        const setupNewUser = async (userId, email) => {
-            console.log("Configurando novo usuário:", userId);
-            const userDocRef = doc(db, "users", userId);
-            const initialData = {
-                email: email,
-                role: 'user',
-                status: 'pending', // 'pending', 'approved', 'rejected'
-                pesos_carnes: DEFAULT_DATABASE,
-                itens_database: DEFAULT_ITENS_DATABASE,
-                item_config: {},
-                boi_venda_prices: {},
-            };
-            await setDoc(userDocRef, initialData);
-            return initialData;
-        };
-
-        const loadUserData = async (userId) => {
-            showLoading(true);
-            const userDocRef = doc(db, "users", userId);
-            const docSnap = await getDoc(userDocRef);
-            
-            hideAllContainers();
-
-            if (docSnap.exists()) {
-                userData = docSnap.data();
-                console.log("Dados do usuário carregados:", userData.role, userData.status);
-                
-                if (userData.role === 'admin') {
-                    initializeAppAdminUI();
-                } else if (userData.status === 'approved') {
-                    initializeAppUI();
-                } else if (userData.status === 'pending') {
-                    pendingContainer.classList.remove('hidden');
-                } else { // rejected or other status
-                    alert('Sua conta não foi aprovada. Entre em contato com o administrador.');
-                    await signOut(auth);
-                }
-
-            } else {
-                console.log("Nenhum dado de usuário encontrado no Firestore.");
-                authContainer.classList.remove('hidden');
+        // --- Data Handling ---
+        const saveData = () => {
+            try {
+                localStorage.setItem('meatCalculatorData', JSON.stringify(appData));
+                alert('Dados salvos com sucesso no seu navegador!');
+            } catch (e) {
+                console.error("Erro ao salvar dados:", e);
+                alert('Não foi possível salvar os dados. O armazenamento do navegador pode estar cheio.');
             }
-            showLoading(false);
         };
-        
-        const saveUserData = async () => {
-            if (!currentUser) return;
-            showLoading(true);
-            const userDocRef = doc(db, "users", currentUser.uid);
-            await updateDoc(userDocRef, {
-                pesos_carnes: userData.pesos_carnes,
-                itens_database: userData.itens_database,
-                item_config: userData.item_config,
-                boi_venda_prices: userData.boi_venda_prices
+
+        const loadData = () => {
+            const savedData = localStorage.getItem('meatCalculatorData');
+            if (savedData) {
+                appData = JSON.parse(savedData);
+                if (!appData.pesos_carnes) appData.pesos_carnes = DEFAULT_PESOS_DATABASE;
+                if (!appData.itens_database) appData.itens_database = DEFAULT_ITENS_DATABASE;
+            } else {
+                appData = {
+                    pesos_carnes: { ...DEFAULT_PESOS_DATABASE },
+                    itens_database: JSON.parse(JSON.stringify(DEFAULT_ITENS_DATABASE)),
+                    item_config: {},
+                    cost_inputs: { suino_peso: "47,200", suino_pr_unit: "12,00", st_percent: "6,05", fator: "92,00" }
+                };
+            }
+            Object.values(appData.itens_database).flat().forEach(item => {
+                const safe_cod = item.cod.replace(/\//g, '-');
+                if (!appData.item_config[safe_cod]) appData.item_config[safe_cod] = { prUnit: 0.0 };
+                if (item.precoPago && !appData.item_config[safe_cod].precoVenda) appData.item_config[safe_cod].precoVenda = 0.0;
             });
-            console.log("Dados do usuário salvos.");
-            alert("Dados salvos com sucesso!");
-            showLoading(false);
         };
 
-        const initializeAppUI = () => {
-            appContainer.classList.remove('hidden');
-            userEmailSpan.textContent = currentUser.email;
-            buildTables();
+        // --- Modal ---
+        const modalContainer = document.getElementById('modal-container');
+        const modalContent = document.getElementById('modal-content');
+        const showModal = (content) => {
+            modalContent.innerHTML = content;
+            modalContainer.classList.remove('hidden');
+        };
+        const hideModal = () => modalContainer.classList.add('hidden');
+        modalContainer.addEventListener('click', (e) => { if (e.target === modalContainer) hideModal(); });
+
+        // --- UI Building & Calculations ---
+        const render = () => {
+            calculateCost();
+            buildCostCalculator();
+            buildAllSuinoTables();
+            buildBoiTable();
         };
 
-        const initializeAppAdminUI = async () => {
-            adminContainer.classList.remove('hidden');
-            document.getElementById('admin-email').textContent = currentUser.email;
-            
-            const pendingUsersList = document.getElementById('pending-users-list');
-            pendingUsersList.innerHTML = '';
-            
-            showLoading(true);
-            const usersRef = collection(db, "users");
-            const q = query(usersRef, where("status", "==", "pending"));
-            const querySnapshot = await getDocs(q);
-            
-            if (querySnapshot.empty) {
-                pendingUsersList.innerHTML = '<p class="text-stone-500">Nenhum usuário pendente.</p>';
-            } else {
-                querySnapshot.forEach((userDoc) => {
-                    const user = userDoc.data();
-                    const userId = userDoc.id;
-                    const userDiv = document.createElement('div');
-                    userDiv.className = 'flex justify-between items-center p-3 bg-stone-100 rounded-md';
-                    userDiv.innerHTML = `
-                        <span class="text-stone-800">${user.email}</span>
-                        <div>
-                            <button data-uid="${userId}" class="approve-btn px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-md hover:bg-green-600">Aprovar</button>
-                            <button data-uid="${userId}" class="reject-btn px-3 py-1 bg-red-500 text-white text-sm font-semibold rounded-md hover:bg-red-600 ml-2">Rejeitar</button>
-                        </div>
-                    `;
-                    pendingUsersList.appendChild(userDiv);
+        const calculateCost = () => {
+            const { suino_peso, suino_pr_unit, st_percent, fator } = appData.cost_inputs;
+            const peso = parseFloatBR(suino_peso);
+            const pr_unit = parseFloatBR(suino_pr_unit);
+            const st = parseFloatBR(st_percent);
+            const fat = parseFloatBR(fator);
+            const suino_total = peso * pr_unit;
+            const st_total = suino_total * (st / 100.0);
+            const custo_com_st = suino_total + st_total;
+            totalLiquidoCustoValor = (fat !== 0) ? (custo_com_st / fat) * 100.0 : 0;
+        };
+
+        const buildCostCalculator = () => {
+            const container = document.getElementById('cost-calculator-container');
+            container.innerHTML = '';
+            const createInput = (id, label, value) => {
+                const div = document.createElement('div');
+                div.innerHTML = `<label for="${id}" class="block text-sm font-medium text-stone-700">${label}</label>
+                                 <input type="text" id="${id}" value="${value}" class="mt-1 block w-full px-3 py-2 border border-stone-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">`;
+                div.querySelector('input').addEventListener('change', (e) => {
+                    appData.cost_inputs[id] = e.target.value;
+                    render();
                 });
-            }
-            showLoading(false);
+                return div;
+            };
+            container.appendChild(createInput('suino_peso', 'Peso Suíno (Kg)', appData.cost_inputs.suino_peso));
+            container.appendChild(createInput('suino_pr_unit', 'Preço Unitário (R$)', appData.cost_inputs.suino_pr_unit));
+            container.appendChild(createInput('st_percent', 'ST (%)', appData.cost_inputs.st_percent));
+            container.appendChild(createInput('fator', 'Fator (%)', appData.cost_inputs.fator));
+            const resultsContainer = document.createElement('div');
+            resultsContainer.className = "md:col-span-2 lg:col-span-4 mt-4 pt-4 border-t";
+            resultsContainer.innerHTML = `<div class="flex justify-end items-center text-lg font-bold">
+                                            <span class="text-stone-600 mr-4">TOTAL LÍQUIDO CUSTO:</span>
+                                            <span class="text-indigo-700">${formatCurrency(totalLiquidoCustoValor)}</span>
+                                          </div>`;
+            container.appendChild(resultsContainer);
         };
 
-        const updateUserStatus = async (userId, newStatus) => {
-            showLoading(true);
-            const userDocRef = doc(db, "users", userId);
-            await updateDoc(userDocRef, { status: newStatus });
-            console.log(`Usuário ${userId} atualizado para ${newStatus}`);
-            initializeAppAdminUI();
+        const buildSuinoTable = (modelKey, title) => {
+            const items = appData.itens_database[modelKey] || [];
+            const container = document.createElement('div');
+            container.className = 'bg-white p-4 rounded-lg shadow-lg overflow-x-auto';
+            let tableTotal = 0;
+            const tableRowsHTML = items.map((item, index) => {
+                const safe_cod = item.cod.replace(/\//g, '-');
+                const config = appData.item_config[safe_cod] || { prUnit: 0.0 };
+                const peso = (item.linkedPesoKeys || []).reduce((sum, key) => sum + (appData.pesos_carnes[key] || 0), 0);
+                const prUnit = config.prUnit;
+                const total = peso * prUnit;
+                tableTotal += total;
+                return `<tr class="bg-white border-b hover:bg-stone-50">
+                            <td class="px-4 py-3 font-medium text-stone-900 whitespace-nowrap">${item.desc}</td>
+                            <td class="px-4 py-3 text-right">
+                                <button data-modelkey="${modelKey}" data-index="${index}" class="link-peso-btn px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200">${formatNumber(peso)}</button>
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                <input type="text" value="${String(prUnit.toFixed(2)).replace('.',',')}" data-cod="${safe_cod}" class="suino-price-input price-input text-right bg-stone-50 border border-stone-300 rounded-md px-2 py-1 shadow-sm">
+                            </td>
+                            <td class="px-4 py-3 text-right font-semibold">${formatCurrency(total)}</td>
+                        </tr>`;
+            }).join('');
+            const lucroPercent = totalLiquidoCustoValor > 0 ? ((tableTotal - totalLiquidoCustoValor) / totalLiquidoCustoValor) * 100 : 0;
+            const profitColor = lucroPercent >= 0 ? 'text-green-600' : 'text-red-600';
+            container.innerHTML = `<div class="flex justify-between items-center mb-3">
+                                     <h3 class="font-bold text-lg">${title}</h3>
+                                     <p class="font-bold text-lg ${profitColor}">LUCRO = ${lucroPercent.toFixed(2).replace('.',',')}%</p>
+                                   </div>
+                                   <table class="w-full text-sm text-left text-stone-500">
+                                     <thead class="text-xs text-stone-700 uppercase bg-stone-50">
+                                       <tr>
+                                         <th scope="col" class="px-4 py-3">Descrição</th>
+                                         <th scope="col" class="px-4 py-3 text-right">Peso</th>
+                                         <th scope="col" class="px-4 py-3 text-right">Pr. Unit.</th>
+                                         <th scope="col" class="px-4 py-3 text-right">Preço Total</th>
+                                       </tr>
+                                     </thead>
+                                     <tbody>${tableRowsHTML}</tbody>
+                                     <tfoot><tr class="font-semibold text-stone-900 bg-stone-50"><th scope="row" colspan="3" class="px-4 py-3 text-base text-right">Total Bruto de Venda</th><td class="px-4 py-3 text-base text-right">${formatCurrency(tableTotal)}</td></tr></tfoot>
+                                   </table>`;
+            return container;
         };
-
-        const buildTables = () => {
-            const suinoContainer = document.getElementById('suino-tables-container');
-            suinoContainer.innerHTML = `
-                <div class="bg-white p-4 rounded-lg shadow-md">
-                    <h3 class="font-bold text-lg mb-2">Modelo 1</h3>
-                    <p class="text-sm text-stone-600">O conteúdo da tabela para o Modelo 1 será renderizado aqui com base nos dados do usuário.</p>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-md">
-                    <h3 class="font-bold text-lg mb-2">Modelo 2</h3>
-                    <p class="text-sm text-stone-600">O conteúdo da tabela para o Modelo 2 será renderizado aqui com base nos dados do usuário.</p>
-                </div>
-            `;
-
-            const boiContainer = document.getElementById('boi-table-container');
-            boiContainer.innerHTML = `
-                <div class="bg-white p-4 rounded-lg shadow-md">
-                    <h3 class="font-bold text-lg mb-2">Carnes Bovinas</h3>
-                     <p class="text-sm text-stone-600">O conteúdo da tabela de bovinos será renderizado aqui com base nos dados do usuário.</p>
-                </div>
-            `;
-        };
-
-        // --- Auth Handling ---
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                loadUserData(user.uid);
-            } else {
-                currentUser = null;
-                userData = {};
-                hideAllContainers();
-                authContainer.classList.remove('hidden');
-                showLoading(false);
-            }
-        });
-
-        document.getElementById('login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = e.target.email.value;
-            const password = e.target.password.value;
-            showLoading(true);
-            try {
-                if (email.startsWith('caiano') && password === 'hy765100') {
-                     await signInWithEmailAndPassword(auth, email, password);
-                } else {
-                     await signInWithEmailAndPassword(auth, email, password);
-                }
-            } catch (error) {
-                alert(`Erro ao fazer login: ${error.message}`);
-                showLoading(false);
-            }
-        });
-
-        document.getElementById('register-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = e.target.email.value;
-            const password = e.target.password.value;
-            showLoading(true);
-            try {
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                await setupNewUser(userCredential.user.uid, userCredential.user.email);
-                alert('Cadastro realizado! Aguarde a aprovação do administrador.');
-                await signOut(auth);
-            } catch (error) {
-                alert(`Erro ao registrar: ${error.message}`);
-                showLoading(false);
-            }
-        });
         
-        document.getElementById('admin-container').addEventListener('click', (e) => {
-            if (e.target.classList.contains('approve-btn')) {
-                const userId = e.target.dataset.uid;
-                updateUserStatus(userId, 'approved');
+        const buildBoiTable = () => {
+            const container = document.getElementById('boi-table-container');
+            const items = appData.itens_database.boi || [];
+            const tableRowsHTML = items.map(item => {
+                const safe_cod = item.cod.replace(/\//g, '-');
+                const config = appData.item_config[safe_cod] || {};
+                const precoPago = item.precoPago || 0;
+                const precoVenda = config.precoVenda || 0;
+                const precoFormula = (((precoPago * 0.0605) + precoPago) * 100 / 92) * 1.07;
+                return `<tr class="bg-white border-b hover:bg-stone-50">
+                            <td class="px-4 py-3 font-medium text-stone-900 whitespace-nowrap">${item.desc}</td>
+                            <td class="px-4 py-3">${item.cod}</td>
+                            <td class="px-4 py-3 text-right">${formatCurrency(precoPago)}</td>
+                            <td class="px-4 py-3 text-right font-semibold text-blue-600">${formatCurrency(precoFormula)}</td>
+                            <td class="px-4 py-3 text-right">
+                                <input type="text" value="${String(precoVenda.toFixed(2)).replace('.',',')}" data-cod="${safe_cod}" class="boi-price-input price-input text-right bg-stone-50 border border-stone-300 rounded-md px-2 py-1 shadow-sm">
+                            </td>
+                        </tr>`;
+            }).join('');
+            container.innerHTML = `<table class="w-full text-sm text-left text-stone-500">
+                                     <thead class="text-xs text-stone-700 uppercase bg-stone-50">
+                                       <tr>
+                                         <th scope="col" class="px-4 py-3">Descrição</th>
+                                         <th scope="col" class="px-4 py-3">Código</th>
+                                         <th scope="col" class="px-4 py-3 text-right">Preço Pago</th>
+                                         <th scope="col" class="px-4 py-3 text-right">Preço Fórmula</th>
+                                         <th scope="col" class="px-4 py-3 text-right">Preço Venda</th>
+                                       </tr>
+                                     </thead>
+                                     <tbody>${tableRowsHTML}</tbody>
+                                   </table>`;
+        };
+
+        const buildAllSuinoTables = () => {
+            const suinoContainer = document.getElementById('suino-tables-container');
+            suinoContainer.innerHTML = '';
+            suinoContainer.appendChild(buildSuinoTable('modelo1', 'Modelo 1: Pá, Carré com osso | Pernil, Costela limpa'));
+            suinoContainer.appendChild(buildSuinoTable('modelo2', 'Modelo 2: Pá, Carré, Pernil com osso | Costela limpa'));
+        };
+
+        // --- Management Modals ---
+        const openPesoManager = () => {
+            const pesoRows = Object.entries(appData.pesos_carnes).map(([key, value]) => `
+                <div class="grid grid-cols-3 gap-2 items-center mb-2 peso-row">
+                    <input class="col-span-2 px-2 py-1 border rounded" data-original-key="${key}" value="${key}">
+                    <input type="text" class="px-2 py-1 border rounded text-right" value="${String(value).replace('.',',')}">
+                </div>`).join('');
+            const content = `
+                <h2 class="text-xl font-bold mb-4">Gerenciar Pesos (Balanço)</h2>
+                <div id="peso-list">${pesoRows}</div>
+                <div class="flex justify-between mt-4">
+                    <button id="add-peso-btn" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">Adicionar Peso</button>
+                    <div>
+                        <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 mr-2">Cancelar</button>
+                        <button id="save-pesos-btn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar</button>
+                    </div>
+                </div>`;
+            showModal(content);
+        };
+        
+        const openCorteManager = () => {
+            const content = `
+                <h2 class="text-xl font-bold mb-4">Gerenciar Cortes</h2>
+                <div class="border-b border-gray-200">
+                    <nav id="corte-tabs" class="-mb-px flex space-x-4" aria-label="Tabs">
+                        <button data-tab="modelo1" class="tab-button active">Modelo 1</button>
+                        <button data-tab="modelo2" class="tab-button">Modelo 2</button>
+                        <button data-tab="boi" class="tab-button">Boi</button>
+                    </nav>
+                </div>
+                <div id="corte-tab-content" class="mt-4"></div>
+                <div class="flex justify-end mt-4">
+                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Fechar</button>
+                </div>`;
+            showModal(content);
+            buildCorteTab('modelo1');
+        };
+
+        const buildCorteTab = (modelKey) => {
+            const container = document.getElementById('corte-tab-content');
+            const items = appData.itens_database[modelKey] || [];
+            const isBoi = modelKey === 'boi';
+            const headers = isBoi ? '<th>Descrição</th><th>Código</th><th>Preço Pago</th>' : '<th>Descrição</th><th>Código</th>';
+            const rows = items.map((item, index) => `
+                <tr class="hover:bg-stone-100">
+                    <td class="py-1 px-2">${item.desc}</td>
+                    <td class="py-1 px-2">${item.cod}</td>
+                    ${isBoi ? `<td class="py-1 px-2">${formatCurrency(item.precoPago)}</td>` : ''}
+                    <td class="py-1 px-2 text-right">
+                        <button data-modelkey="${modelKey}" data-index="${index}" class="edit-corte-btn text-sm text-blue-600 hover:underline">Editar</button>
+                        <button data-modelkey="${modelKey}" data-index="${index}" class="delete-corte-btn text-sm text-red-600 hover:underline ml-2">Excluir</button>
+                    </td>
+                </tr>`).join('');
+            container.innerHTML = `
+                <table class="w-full text-left text-sm"><thead><tr>${headers}<th>Ações</th></tr></thead><tbody>${rows}</tbody></table>
+                <button data-modelkey="${modelKey}" class="add-corte-btn mt-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">Adicionar Corte</button>`;
+        };
+
+        const openCorteEditor = (modelKey, index = -1) => {
+            const isEdit = index !== -1;
+            const item = isEdit ? appData.itens_database[modelKey][index] : { desc: '', cod: '', precoPago: 0 };
+            const isBoi = modelKey === 'boi';
+            const title = isEdit ? 'Editar Corte' : 'Adicionar Corte';
+            const precoPagoField = isBoi ? `<label class="block mt-2">Preço Pago<input id="corte-preco-pago" class="w-full border rounded px-2 py-1 mt-1" value="${item.precoPago}"></label>` : '';
+            const editorContent = `
+                <div class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50" id="editor-backdrop">
+                    <div class="bg-white p-6 rounded-lg shadow-xl w-96">
+                        <h3 class="text-lg font-bold mb-4">${title}</h3>
+                        <label class="block">Descrição<input id="corte-desc" class="w-full border rounded px-2 py-1 mt-1" value="${item.desc}"></label>
+                        <label class="block mt-2">Código<input id="corte-cod" class="w-full border rounded px-2 py-1 mt-1" value="${item.cod}"></label>
+                        ${precoPagoField}
+                        <div class="flex justify-end mt-4">
+                            <button id="cancel-corte-editor" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 mr-2">Cancelar</button>
+                            <button id="save-corte-btn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.insertAdjacentHTML('beforeend', editorContent);
+            document.getElementById('save-corte-btn').onclick = () => saveCorte(modelKey, index);
+            document.getElementById('cancel-corte-editor').onclick = () => document.getElementById('editor-backdrop').remove();
+            document.getElementById('editor-backdrop').onclick = (e) => { if(e.target.id === 'editor-backdrop') e.currentTarget.remove(); };
+        };
+        
+        const saveCorte = (modelKey, index) => {
+            const desc = document.getElementById('corte-desc').value.trim();
+            const cod = document.getElementById('corte-cod').value.trim();
+            if(!desc || !cod) { alert('Descrição e Código são obrigatórios.'); return; }
+            const newItem = { desc, cod, linkedPesoKeys: index !== -1 ? appData.itens_database[modelKey][index].linkedPesoKeys : [] };
+            if (modelKey === 'boi') {
+                newItem.precoPago = parseFloatBR(document.getElementById('corte-preco-pago').value);
             }
-            if (e.target.classList.contains('reject-btn')) {
-                const userId = e.target.dataset.uid;
-                updateUserStatus(userId, 'rejected');
+            if (index === -1) { // Add
+                appData.itens_database[modelKey].push(newItem);
+            } else { // Edit
+                appData.itens_database[modelKey][index] = newItem;
             }
-        });
+            document.getElementById('editor-backdrop').remove();
+            buildCorteTab(modelKey);
+        };
+        
+        const openLinkWeightsModal = (modelKey, index) => {
+            const item = appData.itens_database[modelKey][index];
+            const linkedKeys = new Set(item.linkedPesoKeys || []);
+            const pesoCheckboxes = Object.keys(appData.pesos_carnes).sort().map(key => `
+                <label class="block"><input type="checkbox" class="mr-2" value="${key}" ${linkedKeys.has(key) ? 'checked' : ''}>${key}</label>
+            `).join('');
+            const content = `
+                <h2 class="text-xl font-bold mb-4">Vincular Pesos para: ${item.desc}</h2>
+                <div id="link-peso-list" class="space-y-1">${pesoCheckboxes}</div>
+                 <div class="flex justify-end mt-4">
+                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 mr-2">Cancelar</button>
+                    <button id="save-linked-pesos-btn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar</button>
+                </div>`;
+            showModal(content);
+            document.getElementById('save-linked-pesos-btn').onclick = () => {
+                const newLinkedKeys = Array.from(document.querySelectorAll('#link-peso-list input:checked')).map(cb => cb.value);
+                item.linkedPesoKeys = newLinkedKeys;
+                hideModal();
+                render();
+            };
+        };
 
-        document.getElementById('logout-button').addEventListener('click', () => signOut(auth));
-        document.getElementById('admin-logout-button').addEventListener('click', () => signOut(auth));
-        document.getElementById('save-button').addEventListener('click', saveUserData);
+        // --- Initial Load & Event Listeners ---
+        function initializeApp() {
+            loadData();
+            render();
 
-    </script>
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .hidden { display: none; }
-    </style>
-</head>
-<body class="bg-stone-100 text-stone-800">
-
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-        <div class="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-white"></div>
-    </div>
-
-    <!-- Auth Container -->
-    <div id="auth-container" class="min-h-screen flex items-center justify-center p-4">
-        <div class="w-full max-w-4xl p-8 space-y-8 bg-white rounded-lg shadow-2xl">
-            <div class="text-center">
-                <h1 class="text-3xl font-bold text-stone-900">Calculadora de Preços de Carnes</h1>
-                <p class="mt-2 text-stone-600">Faça login ou crie uma conta para continuar</p>
-            </div>
+            document.getElementById('save-button').addEventListener('click', saveData);
+            document.getElementById('manage-pesos-btn').addEventListener('click', openPesoManager);
+            document.getElementById('manage-cortes-btn').addEventListener('click', openCorteManager);
             
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12">
-                <!-- Login Form -->
-                <form id="login-form" class="space-y-6">
-                    <h2 class="text-2xl font-semibold text-center text-stone-800">Login</h2>
-                    <div>
-                        <label for="login-email" class="sr-only">Email</label>
-                        <input id="login-email" name="email" type="email" autocomplete="email" required class="w-full px-4 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="Email">
-                    </div>
-                    <div>
-                        <label for="login-password" class="sr-only">Senha</label>
-                        <input id="login-password" name="password" type="password" autocomplete="current-password" required class="w-full px-4 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="Senha">
-                    </div>
-                    <button type="submit" class="w-full py-3 px-4 bg-yellow-500 text-white font-semibold rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors">
-                        Entrar
-                    </button>
-                </form>
+            document.body.addEventListener('change', (e) => {
+                const target = e.target;
+                if (target.classList.contains('suino-price-input')) {
+                    const safe_cod = target.dataset.cod;
+                    const newValue = parseFloatBR(target.value);
+                    if (!isNaN(newValue)) {
+                        if (!appData.item_config[safe_cod]) appData.item_config[safe_cod] = {};
+                        appData.item_config[safe_cod].prUnit = newValue;
+                        render();
+                    }
+                }
+                if (target.classList.contains('boi-price-input')) {
+                    const safe_cod = target.dataset.cod;
+                    const newValue = parseFloatBR(target.value);
+                    if (!isNaN(newValue)) {
+                        if (!appData.item_config[safe_cod]) appData.item_config[safe_cod] = {};
+                        appData.item_config[safe_cod].precoVenda = newValue;
+                        render();
+                    }
+                }
+            });
 
-                <!-- Register Form -->
-                <form id="register-form" class="space-y-6 border-t md:border-t-0 md:border-l border-stone-200 pt-6 md:pt-0 md:pl-12">
-                    <h2 class="text-2xl font-semibold text-center text-stone-800">Registrar Nova Conta</h2>
-                    <div>
-                        <label for="register-email" class="sr-only">Email</label>
-                        <input id="register-email" name="email" type="email" autocomplete="email" required class="w-full px-4 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Seu melhor email">
-                    </div>
-                    <div>
-                        <label for="register-password" class="sr-only">Senha</label>
-                        <input id="register-password" name="password" type="password" autocomplete="new-password" required class="w-full px-4 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Crie uma senha forte">
-                    </div>
-                    <button type="submit" class="w-full py-3 px-4 bg-green-500 text-white font-semibold rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
-                        Criar Conta
-                    </button>
-                </form>
-            </div>
-             <div class="text-center mt-4 text-sm text-stone-500">
-                <p><strong>Instruções para o Administrador:</strong> Para criar o usuário 'caiano', primeiro registre-se com um email (ex: caiano@email.com) e a senha 'hy765100'. Depois, acesse o painel do Firestore, encontre o documento do usuário e altere o campo 'role' para 'admin' e 'status' para 'approved'.</p>
-            </div>
-        </div>
-    </div>
+            document.body.addEventListener('click', e => {
+                // Peso Manager
+                if(e.target.id === 'add-peso-btn') {
+                    const list = document.getElementById('peso-list');
+                    const newRow = document.createElement('div');
+                    newRow.className = 'grid grid-cols-3 gap-2 items-center mb-2 peso-row';
+                    newRow.innerHTML = `<input class="col-span-2 px-2 py-1 border rounded" placeholder="Nome do Novo Peso">
+                                        <input type="text" class="px-2 py-1 border rounded text-right" value="0,000">`;
+                    list.appendChild(newRow);
+                }
+                if(e.target.id === 'save-pesos-btn') {
+                    const newPesos = {};
+                    document.querySelectorAll('.peso-row').forEach(row => {
+                        const keyInput = row.children[0];
+                        const valueInput = row.children[1];
+                        const key = keyInput.value.trim();
+                        if(key) newPesos[key] = parseFloatBR(valueInput.value);
+                    });
+                    appData.pesos_carnes = newPesos;
+                    hideModal();
+                    render();
+                }
+                // Corte Manager
+                if(e.target.classList.contains('tab-button')) {
+                    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    buildCorteTab(e.target.dataset.tab);
+                }
+                if(e.target.classList.contains('add-corte-btn')) openCorteEditor(e.target.dataset.modelkey);
+                if(e.target.classList.contains('edit-corte-btn')) openCorteEditor(e.target.dataset.modelkey, parseInt(e.target.dataset.index));
+                if(e.target.classList.contains('delete-corte-btn')) {
+                    if(confirm('Tem certeza que deseja excluir este corte?')) {
+                        appData.itens_database[e.target.dataset.modelkey].splice(parseInt(e.target.dataset.index), 1);
+                        buildCorteTab(e.target.dataset.modelkey);
+                    }
+                }
+                // Link Pesos
+                if(e.target.classList.contains('link-peso-btn')) {
+                    openLinkWeightsModal(e.target.dataset.modelkey, parseInt(e.target.dataset.index));
+                }
+            });
+        }
 
-    <!-- App Container -->
-    <div id="app-container" class="hidden">
-        <header class="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-10">
-            <h1 class="text-2xl font-bold text-stone-900">Minha Calculadora</h1>
-            <div class="flex items-center space-x-4">
-                 <button id="save-button" class="px-4 py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 transition-colors">Salvar Dados</button>
-                <span id="user-email" class="text-stone-600 font-medium"></span>
-                <button id="logout-button" class="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors">Sair</button>
-            </div>
-        </header>
-
-        <main class="p-4 md:p-8 space-y-8">
-            <section class="bg-white p-6 rounded-lg shadow-lg">
-                <h2 class="text-xl font-bold mb-4">Cálculo de Custo do Suíno</h2>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <p class="text-stone-500 col-span-full">O formulário de cálculo de custo será implementado aqui.</p>
-                </div>
-            </section>
-            <section>
-                 <h2 class="text-2xl font-bold mb-4">Tabelas de Suínos</h2>
-                <div id="suino-tables-container" class="grid grid-cols-1 lg:grid-cols-2 gap-8"></div>
-            </section>
-            <section>
-                <h2 class="text-2xl font-bold mb-4">Tabela de Bovinos</h2>
-                <div id="boi-table-container"></div>
-            </section>
-        </main>
-    </div>
-    
-    <!-- Admin Container -->
-    <div id="admin-container" class="hidden">
-         <header class="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-10">
-            <h1 class="text-2xl font-bold text-indigo-800">Painel do Administrador</h1>
-            <div class="flex items-center space-x-4">
-                <span id="admin-email" class="text-stone-600 font-medium"></span>
-                <button id="admin-logout-button" class="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors">Sair</button>
-            </div>
-        </header>
-        <main class="p-4 md:p-8">
-            <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-lg">
-                <h2 class="text-xl font-bold mb-4">Usuários Pendentes de Aprovação</h2>
-                <div id="pending-users-list" class="space-y-3">
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- Pending Approval Container -->
-    <div id="pending-container" class="hidden min-h-screen flex items-center justify-center">
-        <div class="text-center p-8 bg-white rounded-lg shadow-2xl">
-            <h1 class="text-3xl font-bold text-stone-900">Aguardando Aprovação</h1>
-            <p class="mt-2 text-stone-600">Sua conta foi criada e está aguardando a aprovação de um administrador.</p>
-            <p class="mt-1 text-stone-600">Você será notificado por email ou pode tentar fazer login mais tarde.</p>
-        </div>
-    </div>
-
+        initializeApp();
+    </script>
 </body>
 </html>
