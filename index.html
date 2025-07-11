@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Preços de Carnes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module">
+        // Firebase Imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            onAuthStateChanged, 
+            createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, 
+            signOut 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc,
+            updateDoc
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Configuration ---
+        // NOTE: Replace with your actual Firebase config
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // --- App Initialization ---
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- Default Data Structures ---
+        const DEFAULT_DATABASE = {
+            "CABEÇA COMPLETA COM PA": 2.850, "CABEÇA SEM PAPADA": 1.700, "PÉ COM JOELHO": 2.550, "PÉ": 1.050,
+            "JOELHO": 1.500, "ORELHA": 0.250, "ORELHA COM PAPADA": 1.150, "PAPADA": 0.900,
+            "PÁ COM OSSO E TOUCINHO": 12.100, "PÁ SEM OSSO": 8.200, "CARRÉ COM OSSO E TOUCINHO": 6.550,
+            "TOUCINHO DO CARRÉ": 0.850, "OSSO DO CARRÉ": 1.450, "CARRÉ SEM OSSO LOMBO": 3.400,
+            "PERNIL COM OSSO E TOUCINHO": 12.600, "TOUCINHO DO PERNIL": 1.050, "PERNIL SEM OSSO": 10.050,
+            "COSTELINHA SUINA COM TC": 7.400, "TOUCINHO DA COSTELINHA": 1.450, "COSTELINHA SEM TOUCINHO": 6.000,
+            "BARRIGUINHA": 2.550, "PERNIL SUJO": 11.185, "PÁ SUJA": 10.275, "CARRÉ SUJO": 7.3, "LOMBO LIMPO": 3.55
+        };
+        const DEFAULT_ITENS_DATABASE = {
+            "modelo1": [
+                {'desc': 'PÁ COM OSSO E TOUCINHO', 'cod': '1366/6'}, {'desc': 'CARRÉ COM OSSO E TOUCINHO', 'cod': '913/3'},
+                {'desc': 'PERNIL LIMPO', 'cod': '196/0'}, {'desc': 'COSTELINHA SUÍNA LIMPA', 'cod': '199/1'},
+                {'desc': 'CABEÇA', 'cod': '209/4'}, {'desc': 'PÉ COM JOELHO', 'cod': '208/0'},
+                {'desc': 'ORELHA COM PAPADA', 'cod': '67990/9'}, {'desc': 'BARRIGUINHA', 'cod': '1367/3'},
+                {'desc': 'TOUCINHO', 'cod': '201/1'}
+            ],
+            "modelo2": [
+                {'desc': 'PÁ COM OSSO E TOUCINHO', 'cod': '1366/6'}, {'desc': 'CARRÉ COM OSSO E TOUCINHO', 'cod': '913/3'},
+                {'desc': 'PERNIL COM OSSO E TOUCINHO', 'cod': '1819/7'}, {'desc': 'COSTELINHA SUÍNA LIMPA', 'cod': '199/1'},
+                {'desc': 'CABEÇA', 'cod': '209/4'}, {'desc': 'PÉ COM JOELHO', 'cod': '208/0'},
+                {'desc': 'ORELHA COM PAPADA', 'cod': '67990/9'}, {'desc': 'BARRIGUINHA', 'cod': '1367/3'},
+                {'desc': 'TOUCINHO DA COSTELINHA', 'cod': '201/1c'}
+            ],
+            "boi": [
+                {'desc': 'MÚSCULO', 'cod': '175/5', 'precoPago': 25.49},
+                {'desc': 'CHÃ DE DENTRO', 'cod': '173/1', 'precoPago': 30.99},
+                {'desc': 'ALCATRA C/ MAMINHA', 'cod': '944/7', 'precoPago': 31.99},
+            ]
+        };
+
+        // --- Global State ---
+        let currentUser = null;
+        let userData = {};
+
+        // --- UI Elements ---
+        const authContainer = document.getElementById('auth-container');
+        const appContainer = document.getElementById('app-container');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const userEmailSpan = document.getElementById('user-email');
+
+        // --- Utility Functions ---
+        const formatCurrency = (value) => `R$ ${value.toFixed(2).replace('.', ',')}`;
+        const formatNumber = (value) => value.toFixed(3).replace('.', ',');
+        const parseFloatBR = (str) => parseFloat(String(str).replace(',', '.'));
+
+        // --- App Logic ---
+        const showLoading = (show) => {
+            loadingOverlay.style.display = show ? 'flex' : 'none';
+        };
+
+        const setupNewUser = async (userId) => {
+            console.log("Setting up new user:", userId);
+            const userDocRef = doc(db, "users", userId);
+            const initialData = {
+                pesos_carnes: DEFAULT_DATABASE,
+                itens_database: DEFAULT_ITENS_DATABASE,
+                item_config: {},
+                boi_venda_prices: {},
+                // Add other default fields as needed
+            };
+            await setDoc(userDocRef, initialData);
+            return initialData;
+        };
+
+        const loadUserData = async (userId) => {
+            showLoading(true);
+            const userDocRef = doc(db, "users", userId);
+            const docSnap = await getDoc(userDocRef);
+            if (docSnap.exists()) {
+                console.log("User data loaded.");
+                userData = docSnap.data();
+            } else {
+                console.log("No user data found, creating new profile.");
+                userData = await setupNewUser(userId);
+            }
+            initializeAppUI();
+            showLoading(false);
+        };
+        
+        const saveUserData = async () => {
+            if (!currentUser) return;
+            showLoading(true);
+            const userDocRef = doc(db, "users", currentUser.uid);
+            await setDoc(userDocRef, userData); // Overwrites the whole document
+            console.log("User data saved.");
+            showLoading(false);
+        };
+
+        const initializeAppUI = () => {
+            // This is where you'll call functions to build your tables and forms
+            // For now, it just shows the app container
+            authContainer.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+            userEmailSpan.textContent = currentUser.email;
+            
+            // Example: build a table (you'll need to implement this)
+            buildTables();
+        };
+
+        const buildTables = () => {
+            // Placeholder for building your dynamic tables
+            const suinoContainer = document.getElementById('suino-tables-container');
+            suinoContainer.innerHTML = `
+                <div class="bg-yellow-100 p-4 rounded-lg shadow">
+                    <h3 class="font-bold text-lg mb-2">Modelo 1</h3>
+                    <p class="text-sm">Table content for Modelo 1 will be rendered here based on user data.</p>
+                </div>
+                <div class="bg-yellow-100 p-4 rounded-lg shadow">
+                    <h3 class="font-bold text-lg mb-2">Modelo 2</h3>
+                    <p class="text-sm">Table content for Modelo 2 will be rendered here based on user data.</p>
+                </div>
+            `;
+
+            const boiContainer = document.getElementById('boi-table-container');
+            boiContainer.innerHTML = `
+                <div class="bg-blue-100 p-4 rounded-lg shadow">
+                    <h3 class="font-bold text-lg mb-2">Carnes Bovinas</h3>
+                     <p class="text-sm">Beef table content will be rendered here based on user data.</p>
+                </div>
+            `;
+             // You would loop through userData.itens_database and create the full tables
+        };
+
+
+        // --- Auth Handling ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                console.log("User is signed in:", user.uid);
+                loadUserData(user.uid);
+            } else {
+                currentUser = null;
+                userData = {};
+                authContainer.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+                showLoading(false);
+                console.log("User is signed out.");
+            }
+        });
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = e.target.email.value;
+            const password = e.target.password.value;
+            showLoading(true);
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch (error) {
+                alert(`Error logging in: ${error.message}`);
+                showLoading(false);
+            }
+        });
+
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = e.target.email.value;
+            const password = e.target.password.value;
+            showLoading(true);
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+                // onAuthStateChanged will handle the rest
+            } catch (error) {
+                alert(`Error registering: ${error.message}`);
+                showLoading(false);
+            }
+        });
+
+        document.getElementById('logout-button').addEventListener('click', async () => {
+            await signOut(auth);
+        });
+
+        document.getElementById('save-button').addEventListener('click', saveUserData);
+
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body class="bg-stone-100 text-stone-800">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div class="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-white"></div>
+    </div>
+
+    <!-- Auth Container -->
+    <div id="auth-container" class="min-h-screen flex items-center justify-center">
+        <div class="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-lg">
+            <div class="text-center">
+                <h1 class="text-3xl font-bold text-stone-900">Calculadora de Preços</h1>
+                <p class="mt-2 text-stone-600">Faça login ou crie uma conta para continuar</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Login Form -->
+                <form id="login-form" class="space-y-6">
+                    <h2 class="text-xl font-semibold text-center">Login</h2>
+                    <div>
+                        <label for="login-email" class="sr-only">Email</label>
+                        <input id="login-email" name="email" type="email" autocomplete="email" required class="w-full px-3 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="Email">
+                    </div>
+                    <div>
+                        <label for="login-password" class="sr-only">Senha</label>
+                        <input id="login-password" name="password" type="password" autocomplete="current-password" required class="w-full px-3 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="Senha">
+                    </div>
+                    <button type="submit" class="w-full py-2 px-4 bg-yellow-500 text-white font-semibold rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors">
+                        Entrar
+                    </button>
+                </form>
+
+                <!-- Register Form -->
+                <form id="register-form" class="space-y-6">
+                    <h2 class="text-xl font-semibold text-center">Registrar</h2>
+                    <div>
+                        <label for="register-email" class="sr-only">Email</label>
+                        <input id="register-email" name="email" type="email" autocomplete="email" required class="w-full px-3 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Email">
+                    </div>
+                    <div>
+                        <label for="register-password" class="sr-only">Senha</label>
+                        <input id="register-password" name="password" type="password" autocomplete="new-password" required class="w-full px-3 py-2 border border-stone-300 rounded-md placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Nova Senha">
+                    </div>
+                    <button type="submit" class="w-full py-2 px-4 bg-green-500 text-white font-semibold rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                        Criar Conta
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Container -->
+    <div id="app-container" class="hidden">
+        <header class="bg-white shadow-md p-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-stone-900">Calculadora de Preços</h1>
+            <div class="flex items-center space-x-4">
+                 <button id="save-button" class="px-4 py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 transition-colors">Salvar Dados</button>
+                <span id="user-email" class="text-stone-600"></span>
+                <button id="logout-button" class="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors">Sair</button>
+            </div>
+        </header>
+
+        <main class="p-4 md:p-8 space-y-8">
+            <!-- Cost Calculator Section -->
+            <section class="bg-white p-6 rounded-lg shadow-lg">
+                <h2 class="text-xl font-bold mb-4">Cálculo de Custo do Suíno</h2>
+                <!-- Cost calculator form will go here -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <p class="text-stone-500 col-span-full">O formulário de cálculo de custo será implementado aqui, com os campos Peso, Pr. Unit, ST%, Fator, etc.</p>
+                </div>
+            </section>
+
+            <!-- Suino Tables Section -->
+            <section>
+                 <h2 class="text-xl font-bold mb-4">Tabelas de Suínos</h2>
+                <div id="suino-tables-container" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Suino tables will be dynamically inserted here -->
+                </div>
+            </section>
+
+             <!-- Boi Table Section -->
+            <section>
+                <h2 class="text-xl font-bold mb-4">Tabela de Bovinos</h2>
+                <div id="boi-table-container">
+                    <!-- Boi table will be dynamically inserted here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+</body>
+</html>
